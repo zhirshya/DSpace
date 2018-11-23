@@ -49,38 +49,38 @@
         <pluginManagement>
             <plugins>
                 <!-- Use to enforce a particular version of Java and ensure no conflicting dependencies -->
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-enforcer-plugin</artifactId>
-                    <version>1.4.1</version>
-                    <executions>
-                        <execution>
-                            <id>enforce-java</id>
-                            <goals>
-                                <goal>enforce</goal>
-                            </goals>
-                            <configuration>
-                                <rules>
-                                    <requireJavaVersion>
-                                        <version>${java.version}</version>
-                                    </requireJavaVersion>
-                                </rules>    
-                            </configuration>
-                        </execution>
-                        <!-- Make sure that we do not have conflicting dependencies-->
-                        <execution>
-                            <id>enforce-versions</id>
-                            <goals>
-                                <goal>enforce</goal>
-                            </goals>
-                            <configuration>
-                                <rules>
-                                    <DependencyConvergence />
-                                </rules>
-                            </configuration>
-                        </execution>
-                    </executions>
-                </plugin>
+                <!--<plugin>-->
+                    <!--<groupId>org.apache.maven.plugins</groupId>-->
+                    <!--<artifactId>maven-enforcer-plugin</artifactId>-->
+                    <!--<version>1.4.1</version>-->
+                    <!--<executions>-->
+                        <!--<execution>-->
+                            <!--<id>enforce-java</id>-->
+                            <!--<goals>-->
+                                <!--<goal>enforce</goal>-->
+                            <!--</goals>-->
+                            <!--<configuration>-->
+                                <!--<rules>-->
+                                    <!--<requireJavaVersion>-->
+                                        <!--<version>${java.version}</version>-->
+                                    <!--</requireJavaVersion>-->
+                                <!--</rules>    -->
+                            <!--</configuration>-->
+                        <!--</execution>-->
+                        <!--&lt;!&ndash; Make sure that we do not have conflicting dependencies&ndash;&gt;-->
+                        <!--<execution>-->
+                            <!--<id>enforce-versions</id>-->
+                            <!--<goals>-->
+                                <!--<goal>enforce</goal>-->
+                            <!--</goals>-->
+                            <!--<configuration>-->
+                                <!--<rules>-->
+                                    <!--<DependencyConvergence />-->
+                                <!--</rules>-->
+                            <!--</configuration>-->
+                        <!--</execution>-->
+                    <!--</executions>-->
+                <!--</plugin>-->
                 <!-- Used to compile all Java classes -->
                 <plugin>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -309,10 +309,10 @@
                 </executions>
             </plugin>
             <!-- Enforce our version of Java, Maven, dependencies, etc. -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-            </plugin>
+            <!--<plugin>-->
+                <!--<groupId>org.apache.maven.plugins</groupId>-->
+                <!--<artifactId>maven-enforcer-plugin</artifactId>-->
+            <!--</plugin>-->
         </plugins>
     </build>
    
@@ -1279,7 +1279,7 @@
             <dependency>
                 <groupId>com.oracle</groupId>
                 <artifactId>ojdbc6</artifactId>
-                <version>11.2.0.4.0</version>
+                <version>11.2.0.1.0</version>
             </dependency>
             <dependency>
                 <groupId>com.sun.media</groupId>
@@ -1555,18 +1555,33 @@
     </distributionManagement>
 
     <!-- Enable access to artifacts in Sonatype's snapshot repo for Snapshots ONLY -->
-    <repositories>
+    <!--<repositories>
+       <repository>
+         <id>maven-snapshots</id>
+         <url>http://oss.sonatype.org/content/repositories/snapshots</url>
+         <layout>default</layout>
+           <releases>
+             <enabled>false</enabled>
+           </releases>
+         <snapshots>
+           <enabled>true</enabled>
+         </snapshots>
+       </repository>
+   </repositories> -->
+
+   <repositories>
+       <repository>
+           <id>sonatype-releases</id>
+           <name>Sonatype Releases Repository</name>
+           <url>https://oss.sonatype.org/content/repositories/releases/</url>
+       </repository>
+       <!--Nor sonatype nor maven central appear to still contain org.restlet.jee:org.restlet.ext.servlet:jar:2.1.1 any more. No problem if it is in your local repo. Build fail if it isn't-->
         <repository>
-          <id>maven-snapshots</id>
-          <url>http://oss.sonatype.org/content/repositories/snapshots</url>
-          <layout>default</layout>
-            <releases>
-              <enabled>false</enabled>
-            </releases>
-          <snapshots>
-            <enabled>true</enabled>
-          </snapshots>
+            <id>restlet</id>
+            <name>restlet</name>
+            <url>http://maven.restlet.org</url>
         </repository>
     </repositories>
+
 
 </project>

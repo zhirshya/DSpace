@@ -9,13 +9,26 @@ package org.dspace.app.xmlui.cocoon;
 
 import java.io.*;
 import java.net.URLEncoder;
+import java.nio.file.NoSuchFileException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Date;
 import java.util.Map;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+
+import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
+
 import javax.mail.internet.MimeUtility;
 import javax.servlet.http.HttpServletResponse;
+
+import static java.awt.Font.PLAIN;
+import static java.awt.Font.BOLD;
+import static java.awt.Font.ITALIC;
 
 import org.apache.avalon.excalibur.pool.Recyclable;
 import org.apache.avalon.framework.parameters.Parameters;
@@ -231,7 +244,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
             
             if (bitstreamID != null)
             {
-                // Direct reference to the individual bitstream ID.
+                // Direct reference to the individual bitstream ID.recycle
                 bitstream = bitstreamService.findByIdOrLegacyId(context, bitstreamID);
             }
             else if (itemID != null)
@@ -396,6 +409,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                         log.info("CitedDocument was ok," + tempFile.getAbsolutePath());
                     }
 
+//                    watermark();
 
                     fileInputStream = new FileInputStream(tempFile);
                     if(fileInputStream == null) {
@@ -661,7 +675,11 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         {
             response.setDateHeader("Expires", System.currentTimeMillis() + expires);
         }
-        
+
+        watermark();
+        assert tempFile != null;
+//        bitstreamSize = tempFile.length();
+
         // If this is a large bitstream then tell the browser it should treat it as a download.
         int threshold = DSpaceServicesFactory.getInstance().getConfigurationService().getIntProperty("xmlui.content_disposition_threshold");
         if (bitstreamSize > threshold && threshold != 0)
@@ -682,7 +700,8 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                 }
                 catch (UnsupportedEncodingException see)
                 {
-                        // do nothing
+                    log.error("Caught UnsupportedEncodingException: download file name encoding problem." + see.getLocalizedMessage());
+                    // do nothing
                 }
                 response.setHeader("Content-Disposition", "attachment;filename=" + '"' + name + '"');
         }
@@ -756,7 +775,6 @@ public class BitstreamReader extends AbstractReader implements Recyclable
             else
             {
                 response.setHeader("Content-Length", String.valueOf(this.bitstreamSize));
-
                 while ((length = this.bitstreamInputStream.read(buffer)) > -1)
                 {
                     out.write(buffer, 0, length);
@@ -766,6 +784,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         }
         finally
         {
+                this.tempFile = null;
             try
             {
                 // Close the bitstream input stream so that we don't leak a file descriptor
@@ -773,7 +792,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                 
                 // Close the output stream as per Cocoon docs: http://cocoon.apache.org/2.2/core-modules/core/2.2/681_1_1.html
                 out.close();
-            } 
+            }
             catch (IOException ioe)
             {
                 // Closing the stream threw an IOException but do we want this to propagate up to Cocoon?
@@ -781,7 +800,6 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                 log.warn("Caught IO exception when closing a stream: " + ioe.getMessage());
             }
         }
-
     }
 
     /**
@@ -806,10 +824,67 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         this.bitstreamMimeType = null;
         this.bitstreamName = null;
         this.itemLastModified = null;
-        this.tempFile = null;
+//        this.tempFile = null;
         this.hasNotBeenModified=false;
         super.recycle();
     }
 
+    /**
+     * watermark images, pdf, office documents, videos and audios, using info read from configuration file.
+     */
+    private void watermark() {
+       try {
+            BufferedImage sourceImage = ImageIO.read(this.bitstreamInputStream);
+            Graphics2D g2d = (Graphics2D) sourceImage.getGraphics();
 
+            // initializes necessary graphic properties
+            AlphaComposite alphaChannel = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.1f);
+            g2d.setComposite(alphaChannel);
+            g2d.setColor((Color)Color.class.getField(wmFontColor).get(null));
+            g2d.setFont(new Font(wmFont, FONTSENUM.valueOf(wmFont,FONTSENUM.PLAIN).ordinal(), wmFontSize));
+            FontMetrics fontMetrics = g2d.getFontMetrics();
+            Rectangle2D rect = fontMetrics.getStringBounds(wmText, g2d);
+
+            // calculates the coordinate where the String is painted
+            int centerX = (sourceImage.getWidth() - (int) rect.getWidth()) / 2;
+            int centerY = sourceImage.getHeight() / 2;
+
+            // paints the textual watermark
+            g2d.drawString(wmText, centerX, centerY);
+            String fileExtension = bitstreamMimeType.substring(bitstreamMimeType.lastIndexOf('/') + 1);
+            ImageIO.write(sourceImage, fileExtension.equalsIgnoreCase("jpeg") ? "jpg" : fileExtension, out);
+            g2d.dispose();
+
+        } catch (IOException|NoSuchFieldException|IllegalAccessException e) {
+            log.error("watermark() Exception:" + e.getLocalizedMessage());
+       }
+    }
+
+    public enum FONTSENUM {
+        PLAIN, BOLD, ITALIC;
+        public static <T extends Enum<T>> T valueOf(String name, T defaultVal) {
+            try {
+                return Enum.valueOf(defaultVal.getDeclaringClass(), name);
+            }catch (IllegalArgumentException|NullPointerException e) {
+                log.error("enum FONTSENUM.valueOf() Exception:" + e.getLocalizedMessage());
+                return defaultVal;
+            }
+        }
+    }
+
+    public BitstreamReader() {
+    //initialize configuration items
+        Config conf = ConfigFactory.load();
+        wmText = conf.getString("image.text");
+        wmFont = conf.getString("image.font");
+        wmFontSize = conf.getInt("image.size");
+        wmFontFace = conf.getString("image.fontface");
+        wmFontColor = conf.getString("image.color");
+    }
+
+    private String wmText;
+    private String wmFont;
+    private int wmFontSize;
+    private String wmFontFace;
+    private String wmFontColor;
 }
