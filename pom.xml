@@ -1544,10 +1544,10 @@
     <!-- Configure our release repositories to use Sonatype.
          See: http://central.sonatype.org/pages/apache-maven.html -->
     <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
+        <!--<snapshotRepository>-->
+            <!--<id>ossrh</id>-->
+            <!--<url>https://oss.sonatype.org/content/repositories/snapshots</url>-->
+        <!--</snapshotRepository>-->
         <repository>
             <id>ossrh</id>
             <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
@@ -1575,6 +1575,11 @@
            <name>Sonatype Releases Repository</name>
            <url>https://oss.sonatype.org/content/repositories/releases/</url>
        </repository>
+       <repository>
+           <id>cnt-mvn2</id>
+           <name>central-maven2</name>
+           <url>http://central.maven.org/maven2/</url>
+       </repository>
        <!--Nor sonatype nor maven central appear to still contain org.restlet.jee:org.restlet.ext.servlet:jar:2.1.1 any more. No problem if it is in your local repo. Build fail if it isn't-->
         <repository>
             <id>restlet</id>
@@ -1582,6 +1587,4 @@
             <url>http://maven.restlet.org</url>
         </repository>
     </repositories>
-
-
 </project>

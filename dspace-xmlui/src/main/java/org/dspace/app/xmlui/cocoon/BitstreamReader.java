@@ -20,15 +20,8 @@ import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 
-import com.typesafe.config.Config;
-import com.typesafe.config.ConfigFactory;
-
 import javax.mail.internet.MimeUtility;
 import javax.servlet.http.HttpServletResponse;
-
-import static java.awt.Font.PLAIN;
-import static java.awt.Font.BOLD;
-import static java.awt.Font.ITALIC;
 
 import org.apache.avalon.excalibur.pool.Recyclable;
 import org.apache.avalon.framework.parameters.Parameters;
@@ -66,6 +59,27 @@ import org.xml.sax.SAXException;
 
 import org.apache.log4j.Logger;
 import org.dspace.core.LogManager;
+
+import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
+
+import com.lowagie.text.Element;
+import com.lowagie.text.Image;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.pdf.BaseFont;
+import com.lowagie.text.pdf.ColumnText;
+import com.lowagie.text.pdf.PdfContentByte;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.PdfStamper;
+import com.lowagie.text.pdf.PdfGState;
+import com.lowagie.text.Rectangle;
+import com.lowagie.text.Phrase;
+
+//for watermark text's font related properties
+import static java.awt.Font.PLAIN;
+import static java.awt.Font.BOLD;
+import static java.awt.Font.ITALIC;
+import static com.lowagie.text.Font.BOLDITALIC;
 
 /**
  * The BitstreamReader will query DSpace for a particular bitstream and transmit
@@ -212,6 +226,9 @@ public class BitstreamReader extends AbstractReader implements Recyclable
             throws ProcessingException, SAXException, IOException
     {
         super.setup(resolver, objectModel, src, par);
+
+        //initialize typesafe config object
+        conf = ConfigFactory.load();
 
         try
         {
@@ -494,10 +511,6 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         }
     }
 
-    
-    
-    
-    
     /**
      * Find the bitstream identified by a sequence number on this item.
      *
@@ -677,8 +690,9 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         }
 
         watermark();
-        assert tempFile != null;
-//        bitstreamSize = tempFile.length();
+        //update length of content written to output stream
+        if(tempFile != null)
+            bitstreamSize = tempFile.length();
 
         // If this is a large bitstream then tell the browser it should treat it as a download.
         int threshold = DSpaceServicesFactory.getInstance().getConfigurationService().getIntProperty("xmlui.content_disposition_threshold");
@@ -784,7 +798,6 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         }
         finally
         {
-                this.tempFile = null;
             try
             {
                 // Close the bitstream input stream so that we don't leak a file descriptor
@@ -824,7 +837,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
         this.bitstreamMimeType = null;
         this.bitstreamName = null;
         this.itemLastModified = null;
-//        this.tempFile = null;
+        this.tempFile = null;
         this.hasNotBeenModified=false;
         super.recycle();
     }
@@ -834,54 +847,104 @@ public class BitstreamReader extends AbstractReader implements Recyclable
      */
     private void watermark() {
        try {
-            BufferedImage sourceImage = ImageIO.read(this.bitstreamInputStream);
-            Graphics2D g2d = (Graphics2D) sourceImage.getGraphics();
+            switch(this.bitstreamMimeType) {
+                case "image/jpeg":
+                case "image/png":
+                case "image/gif":
+                case "image/svg+xml":
+                case "image/x-icon":
+                case "image/vnd.microsoft.icon":
+                case "image/bmp":
+                case "image/webp":
+                    wmText = conf.getString("image.text");
+                    wmFont = conf.getString("image.font");
+                    wmFontSize = conf.getInt("image.size");
+                    wmFontFace = conf.getString("image.fontface");
+                    wmFontColor = conf.getString("image.color");
 
-            // initializes necessary graphic properties
-            AlphaComposite alphaChannel = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.1f);
-            g2d.setComposite(alphaChannel);
-            g2d.setColor((Color)Color.class.getField(wmFontColor).get(null));
-            g2d.setFont(new Font(wmFont, FONTSENUM.valueOf(wmFont,FONTSENUM.PLAIN).ordinal(), wmFontSize));
-            FontMetrics fontMetrics = g2d.getFontMetrics();
-            Rectangle2D rect = fontMetrics.getStringBounds(wmText, g2d);
+                    BufferedImage sourceImage = ImageIO.read(this.bitstreamInputStream);
+                    Graphics2D g2d = (Graphics2D) sourceImage.getGraphics();
 
-            // calculates the coordinate where the String is painted
-            int centerX = (sourceImage.getWidth() - (int) rect.getWidth()) / 2;
-            int centerY = sourceImage.getHeight() / 2;
+                    // initializes necessary graphic properties
+                    AlphaComposite alphaChannel = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.1f);
+                    g2d.setComposite(alphaChannel);
+                    g2d.setColor((Color) Color.class.getField(wmFontColor).get(null));
+                    g2d.setFont(new java.awt.Font(wmFont, FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), wmFontSize));
+                    FontMetrics fontMetrics = g2d.getFontMetrics();
+                    Rectangle2D rect = fontMetrics.getStringBounds(wmText, g2d);
 
-            // paints the textual watermark
-            g2d.drawString(wmText, centerX, centerY);
-            String fileExtension = bitstreamMimeType.substring(bitstreamMimeType.lastIndexOf('/') + 1);
-            ImageIO.write(sourceImage, fileExtension.equalsIgnoreCase("jpeg") ? "jpg" : fileExtension, out);
-            g2d.dispose();
+                    // calculates the coordinate where the String is painted
+                    int centerX = (sourceImage.getWidth() - (int) rect.getWidth()) / 2;
+                    int centerY = sourceImage.getHeight() / 2;
 
+                    // paints the textual watermark
+                    g2d.drawString(wmText, centerX, centerY);
+                    String fileExtension = bitstreamMimeType.substring(bitstreamMimeType.lastIndexOf('/') + 1);
+                    ImageIO.write(sourceImage, fileExtension.equalsIgnoreCase("jpeg") ? "jpg" : fileExtension, out);
+                    g2d.dispose();
+                    break;
+                case "application/pdf":
+                    wmText = conf.getString("pdf.text");
+                    wmFont = conf.getString("pdf.font");
+                    wmFontSize = conf.getInt("pdf.size");
+                    wmFontFace = conf.getString("pdf.fontface");
+                    wmFontColor = conf.getString("pdf.color");
+
+                    PdfReader reader = new PdfReader(this.bitstreamInputStream);
+                    int n = reader.getNumberOfPages();
+                    PdfStamper stamper = new PdfStamper(reader, out);
+                    Phrase p = new Phrase(wmText,new com.lowagie.text.Font(FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), wmFontSize, FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), (Color)Color.class.getField(wmFontColor).get(null)));
+                    // transparency
+                    PdfGState gs1 = new PdfGState();
+                    gs1.setFillOpacity(0.5f);
+                    // properties
+                    PdfContentByte over;
+                    Rectangle pagSize;
+                    float x, y;
+                    // loop over every page
+                    for (int i = 1; i <= n; i++) {
+                        pagSize = reader.getPageSizeWithRotation(i);
+                        x = (pagSize.getLeft() + pagSize.getRight()) / 2;
+                        y = (pagSize.getTop() + pagSize.getBottom()) / 2;
+                        over = stamper.getOverContent(i);
+                        over.saveState();
+                        over.setGState(gs1);
+                        ColumnText.showTextAligned(over, Element.ALIGN_CENTER, p, x, y, 0);
+                        over.restoreState();
+                    }
+                    stamper.close();
+                    reader.close();
+                    break;
+                case "audio/midi":
+                case "audio/mpeg":
+                case "audio/webm":
+                case "audio/ogg":
+                case "audio/wav":
+                    break;
+                case "video/webm":
+                case "video/ogg":
+                    break;
+                default:
+                    log.error("unsupported MIME type detected, do nothing.");
+            }
         } catch (IOException|NoSuchFieldException|IllegalAccessException e) {
             log.error("watermark() Exception:" + e.getLocalizedMessage());
        }
     }
 
-    public enum FONTSENUM {
-        PLAIN, BOLD, ITALIC;
+    public enum FontsEnum {
+        PLAIN /*com.lowagie.text.Font.NORMAL*/, BOLD, ITALIC, BOLDITALIC;
         public static <T extends Enum<T>> T valueOf(String name, T defaultVal) {
             try {
                 return Enum.valueOf(defaultVal.getDeclaringClass(), name);
             }catch (IllegalArgumentException|NullPointerException e) {
-                log.error("enum FONTSENUM.valueOf() Exception:" + e.getLocalizedMessage());
+                log.error("enum FontsEnum.valueOf() Exception:" + e.getLocalizedMessage());
                 return defaultVal;
             }
         }
     }
 
-    public BitstreamReader() {
-    //initialize configuration items
-        Config conf = ConfigFactory.load();
-        wmText = conf.getString("image.text");
-        wmFont = conf.getString("image.font");
-        wmFontSize = conf.getInt("image.size");
-        wmFontFace = conf.getString("image.fontface");
-        wmFontColor = conf.getString("image.color");
-    }
-
+    private Config conf;
     private String wmText;
     private String wmFont;
     private int wmFontSize;
