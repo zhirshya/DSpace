@@ -227,9 +227,6 @@ public class BitstreamReader extends AbstractReader implements Recyclable
     {
         super.setup(resolver, objectModel, src, par);
 
-        //initialize typesafe config object
-        conf = ConfigFactory.load();
-
         try
         {
             this.request = ObjectModelHelper.getRequest(objectModel);
@@ -249,7 +246,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
             String itemID = par.getParameter("itemID", null);
             String bitstreamID = par.getParameter("bitstreamID", null);
             String handle = par.getParameter("handle", null);
-            
+
             int sequence = par.getParameterAsInteger("sequence", -1);
             String name = par.getParameter("name", null);
         
@@ -942,6 +939,11 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                 return defaultVal;
             }
         }
+    }
+
+    public BitstreamReader() {
+        //initialize typesafe config object
+        conf = ConfigFactory.load();
     }
 
     private Config conf;
