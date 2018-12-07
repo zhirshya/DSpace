@@ -11,7 +11,9 @@ import java.io.*;
 import java.net.URLEncoder;
 import java.nio.file.NoSuchFileException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Date;
 import java.util.Map;
 
@@ -55,6 +57,7 @@ import org.dspace.eperson.Group;
 import org.dspace.handle.factory.HandleServiceFactory;
 import org.dspace.handle.service.HandleService;
 import org.dspace.usage.UsageEvent;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STHdrFtr;
 import org.xml.sax.SAXException;
 
 import org.apache.log4j.Logger;
@@ -74,13 +77,16 @@ import com.lowagie.text.pdf.PdfStamper;
 import com.lowagie.text.pdf.PdfGState;
 import com.lowagie.text.Rectangle;
 import com.lowagie.text.Phrase;
-
 //for watermark text's font related properties
 import static java.awt.Font.PLAIN;
 import static java.awt.Font.BOLD;
 import static java.awt.Font.ITALIC;
 import static com.lowagie.text.Font.BOLDITALIC;
 
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xwpf.usermodel.*;
+import org.apache.poi.xwpf.model.XWPFHeaderFooterPolicy;
+import org.apache.poi.hwpf.usermodel.*;
 /**
  * The BitstreamReader will query DSpace for a particular bitstream and transmit
  * it to the user. There are several methods of specifying the bitstream to be
@@ -865,7 +871,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                     // initializes necessary graphic properties
                     AlphaComposite alphaChannel = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.1f);
                     g2d.setComposite(alphaChannel);
-                    g2d.setColor((Color) Color.class.getField(wmFontColor).get(null));
+                    g2d.setColor((java.awt.Color) java.awt.Color.class.getField(wmFontColor).get(null));
                     g2d.setFont(new java.awt.Font(wmFont, FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), wmFontSize));
                     FontMetrics fontMetrics = g2d.getFontMetrics();
                     Rectangle2D rect = fontMetrics.getStringBounds(wmText, g2d);
@@ -890,7 +896,7 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                     PdfReader reader = new PdfReader(this.bitstreamInputStream);
                     int n = reader.getNumberOfPages();
                     PdfStamper stamper = new PdfStamper(reader, out);
-                    Phrase p = new Phrase(wmText,new com.lowagie.text.Font(FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), wmFontSize, FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), (Color)Color.class.getField(wmFontColor).get(null)));
+                    Phrase p = new Phrase(wmText,new com.lowagie.text.Font(FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), wmFontSize, FontsEnum.valueOf(wmFont, FontsEnum.PLAIN).ordinal(), (java.awt.Color)java.awt.Color.class.getField(wmFontColor).get(null)));
                     // transparency
                     PdfGState gs1 = new PdfGState();
                     gs1.setFillOpacity(0.5f);
@@ -911,6 +917,89 @@ public class BitstreamReader extends AbstractReader implements Recyclable
                     }
                     stamper.close();
                     reader.close();
+                    //https://poi.apache.org/components/spreadsheet/converting.html
+                    //generic SS Usermodel Code
+                    //https://poi.apache.org/apidocs/dev/index.html
+                case "application/msword":
+                    wmText = conf.getString("office.word.text");
+                    wmFont = conf.getString("office.word.font");
+                    wmFontSize = conf.getInt("office.word.size");
+                    wmFontFace = conf.getString("office.word.fontface");
+                    wmFontColor = conf.getString("office.word.color");
+                    break;
+                case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                    wmText = conf.getString("office.word.text");
+                    wmFont = conf.getString("office.word.font");
+                    wmFontSize = conf.getInt("office.word.size");
+                    wmFontFace = conf.getString("office.word.fontface");
+                    wmFontColor = conf.getString("office.word.color");
+
+                    XWPFDocument doc = new XWPFDocument(this.bitstreamInputStream);
+                    /*Iterator<XWPFParagraph> iterPrg = doc.getParagraphsIterator();
+                    while (iterPrg.hasNext()) {
+                        List<XWPFRun> lstRn = iterPrg.next().getRuns();
+                        for (XWPFRun run : lstRn) {*/
+                            // create header-footer
+                            XWPFHeaderFooterPolicy headerFooterPolicy = doc.getHeaderFooterPolicy();
+                            if (headerFooterPolicy == null)
+                                headerFooterPolicy = doc.createHeaderFooterPolicy();
+                            // create default Watermark - fill color black and not rotated
+                            headerFooterPolicy.createWatermark(wmText);
+
+                            List<STHdrFtr.Enum> hdrftrPolicyLst = new ArrayList<STHdrFtr.Enum>();
+                            hdrftrPolicyLst.add(STHdrFtr.DEFAULT);
+                            hdrftrPolicyLst.add(STHdrFtr.FIRST);
+                            hdrftrPolicyLst.add(STHdrFtr.EVEN);
+                            ListIterator<STHdrFtr.Enum> iter = hdrftrPolicyLst.listIterator();
+                            while(iter.hasNext()) {
+                                XWPFHeader header = headerFooterPolicy.getHeader(iter.next());
+                                XWPFParagraph paragraph = header.getParagraphArray(0);
+                                // get com.microsoft.schemas.vml.CTShape where fill color and rotation is set
+                                org.apache.xmlbeans.XmlObject[] xmlobjects = paragraph.getCTP().getRArray(0).getPictArray(0).selectChildren(
+                                        new javax.xml.namespace.QName("urn:schemas-microsoft-com:vml", "shape"));
+
+                                if (xmlobjects.length > 0) {
+                                    com.microsoft.schemas.vml.CTShape ctshape = (com.microsoft.schemas.vml.CTShape) xmlobjects[0];
+                                    // set fill color
+//                                ctshape.setFillcolor("#d8d8d8");
+                                    ctshape.setFillcolor(wmFontColor);
+                                    // set rotation
+                                    ctshape.setStyle(ctshape.getStyle() + ";rotation:315");
+                                    //System.out.println(ctshape);
+                                }
+                            }
+                    /*    }
+                    }*/
+                    doc.write(out);
+                    doc.close();
+                    break;
+                case "application/vnd.ms-excel":
+                    wmText = conf.getString("office.excel.text");
+                    wmFont = conf.getString("office.excel.font");
+                    wmFontSize = conf.getInt("office.excel.size");
+                    wmFontFace = conf.getString("office.excel.fontface");
+                    wmFontColor = conf.getString("office.excel.color");
+                    break;
+                case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                    wmText = conf.getString("office.excel.text");
+                    wmFont = conf.getString("office.excel.font");
+                    wmFontSize = conf.getInt("office.excel.size");
+                    wmFontFace = conf.getString("office.excel.fontface");
+                    wmFontColor = conf.getString("office.excel.color");
+                    break;
+                case "application/vnd.ms-powerpoint":
+                    wmText = conf.getString("office.powerpoint.text");
+                    wmFont = conf.getString("office.powerpoint.font");
+                    wmFontSize = conf.getInt("office.powerpoint.size");
+                    wmFontFace = conf.getString("office.powerpoint.fontface");
+                    wmFontColor = conf.getString("office.powerpoint.color");
+                    break;
+                case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+                    wmText = conf.getString("office.powerpoint.text");
+                    wmFont = conf.getString("office.powerpoint.font");
+                    wmFontSize = conf.getInt("office.powerpoint.size");
+                    wmFontFace = conf.getString("office.powerpoint.fontface");
+                    wmFontColor = conf.getString("office.powerpoint.color");
                     break;
                 case "audio/midi":
                 case "audio/mpeg":
